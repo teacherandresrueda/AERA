@@ -1,29 +1,102 @@
 import streamlit as st
 import pandas as pd
 import random
+import json
+from collections import Counter
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="Smart English System", layout="wide")
 
+# ---------------- LOGIN ----------------
+users = {
+    "teacher": "1234",
+    "student": "abcd"
+}
+
+if "logged" not in st.session_state:
+    st.session_state.logged = False
+
+if not st.session_state.logged:
+    st.title("🔐 Login")
+
+    user = st.text_input("User")
+    pwd = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+        if user in users and users[user] == pwd:
+            st.session_state.logged = True
+            st.success("Welcome 🚀")
+        else:
+            st.error("Wrong credentials")
+
+    st.stop()
+
+# ---------------- SESSION STATE ----------------
+if "xp" not in st.session_state:
+    st.session_state.xp = 0
+
+if "level" not in st.session_state:
+    st.session_state.level = 1
+
+if "streak" not in st.session_state:
+    st.session_state.streak = 1
+
+if "errors" not in st.session_state:
+    st.session_state.errors = []
+
+# ---------------- SAVE / LOAD ----------------
+def save_data():
+    data = {
+        "xp": st.session_state.xp,
+        "level": st.session_state.level,
+        "errors": st.session_state.errors
+    }
+    with open("user_data.json", "w") as f:
+        json.dump(data, f)
+
+def load_data():
+    try:
+        with open("user_data.json") as f:
+            data = json.load(f)
+            st.session_state.xp = data["xp"]
+            st.session_state.level = data["level"]
+            st.session_state.errors = data["errors"]
+    except:
+        pass
+
+load_data()
+
+# ---------------- XP SYSTEM ----------------
+def add_xp(points):
+    st.session_state.xp += points
+
+    if st.session_state.xp >= 50:
+        st.session_state.level += 1
+        st.session_state.xp = 0
+        st.success("🚀 LEVEL UP!")
+
 # ---------------- DATA ----------------
 lessons = {
-    "A1": ["Greetings", "Numbers", "Colors"],
-    "A2": ["Past Tense", "Daily Routine", "Food"],
-    "B1": ["Opinions", "Travel", "Work"]
+    "A1": ["Greetings", "Numbers"],
+    "A2": ["Past Tense"],
+    "B1": ["Opinions"]
 }
 
 questions = {
     "Greetings": [
-        {"q": "How do you say 'Hola'?", "a": "Hello"},
-        {"q": "Good morning in Spanish?", "a": "Buenos días"}
+        {"q": "How do you say 'Hola'?", "a": "hello"},
+        {"q": "Good morning in Spanish?", "a": "buenos días"}
     ],
     "Numbers": [
         {"q": "Number after 5?", "a": "6"},
         {"q": "Number before 10?", "a": "9"}
+    ],
+    "Past Tense": [
+        {"q": "Past of 'go'?", "a": "went"}
     ]
 }
 
-# ---------------- SIDEBAR ----------------
+# ---------------- MENU ----------------
 menu = st.sidebar.selectbox("Menu", [
     "Dashboard",
     "Courses",
@@ -36,12 +109,14 @@ menu = st.sidebar.selectbox("Menu", [
 if menu == "Dashboard":
     st.title("📊 Dashboard")
 
-    progress = random.randint(10, 90)
+    st.metric("Level", st.session_state.level)
+    st.metric("XP", st.session_state.xp)
+    st.metric("Streak 🔥", st.session_state.streak)
 
-    st.metric("Your Progress", f"{progress}%")
+    progress = min(st.session_state.xp, 100)
     st.progress(progress)
 
-    st.info("🔥 Recommendation: Practice Greetings today")
+    st.info("🔥 Recommendation: Practice your weakest topic")
 
 # ---------------- COURSES ----------------
 elif menu == "Courses":
@@ -53,10 +128,10 @@ elif menu == "Courses":
 
     for lesson in lessons[level]:
         if st.button(f"Start {lesson}"):
-            st.session_state["lesson"] = lesson
+            st.session_state.lesson = lesson
 
     if "lesson" in st.session_state:
-        lesson = st.session_state["lesson"]
+        lesson = st.session_state.lesson
         st.success(f"Lesson: {lesson}")
 
         if lesson in questions:
@@ -64,19 +139,24 @@ elif menu == "Courses":
             answer = st.text_input(q["q"])
 
             if st.button("Submit"):
-                if answer.lower() == q["a"].lower():
-                    st.success("Correct ✅")
+                if answer.lower() == q["a"]:
+                    add_xp(10)
+                    st.success("Correct ✅ +10 XP")
+                    save_data()
                 else:
                     st.error(f"Incorrect ❌ Answer: {q['a']}")
+                    st.session_state.errors.append(lesson)
+                    save_data()
 
 # ---------------- SMART MODE ----------------
 elif menu == "Smart Mode":
     st.title("🧠 Smart Mode")
 
-    errors = ["Greetings", "Numbers", "Past Tense"]
-    recommendation = random.choice(errors)
-
-    st.warning(f"⚡ You need to improve: {recommendation}")
+    if st.session_state.errors:
+        most_common = Counter(st.session_state.errors).most_common(1)[0][0]
+        st.warning(f"⚡ Focus here: {most_common}")
+    else:
+        st.success("No weaknesses detected 🚀")
 
 # ---------------- CHALLENGES ----------------
 elif menu == "Challenges":
@@ -87,7 +167,9 @@ elif menu == "Challenges":
 
     if st.button("Check"):
         if answer.lower() == "good morning":
-            st.success("🔥 +10 points")
+            add_xp(10)
+            st.success("🔥 +10 XP")
+            save_data()
         else:
             st.error("Try again")
 
